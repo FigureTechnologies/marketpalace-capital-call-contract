@@ -1,8 +1,9 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    attr, entry_point, to_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response, StdResult, Uint128
+    attr, entry_point, to_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult, Uint128,
 };
-use provwasm_std::{ProvenanceMsg};
+use provwasm_std::ProvenanceMsg;
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
@@ -40,7 +41,7 @@ pub fn instantiate(
         capital_amount: msg.capital_amount,
         due_date_year: msg.due_date_year,
         due_date_month: msg.due_date_month,
-        due_date_day: msg.due_date_day
+        due_date_day: msg.due_date_day,
     };
     config(deps.storage).save(&state)?;
 
@@ -62,11 +63,15 @@ pub fn execute(
     }
 }
 
-pub fn try_commit_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response<ProvenanceMsg>, ContractError> {
+pub fn try_commit_capital(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+) -> Result<Response<ProvenanceMsg>, ContractError> {
     let state = config_read(deps.storage).load()?;
 
     if state.status != Status::PendingCapital {
-        return Err(contract_error("contract no longer pending capital"))
+        return Err(contract_error("contract no longer pending capital"));
     }
 
     if info.sender != state.lp_capital_source {
@@ -79,11 +84,11 @@ pub fn try_commit_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result
 
     let deposit = info.funds.first().unwrap();
     if deposit.denom != state.capital_denom {
-        return Err(contract_error("capital do not match required denom"))
+        return Err(contract_error("capital do not match required denom"));
     }
 
     if u128::from(deposit.amount) != state.capital_amount {
-        return Err(contract_error("incorrect capital amount"))
+        return Err(contract_error("incorrect capital amount"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -99,15 +104,19 @@ pub fn try_commit_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result
     })
 }
 
-pub fn try_recall_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response<ProvenanceMsg>, ContractError> {
+pub fn try_recall_capital(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+) -> Result<Response<ProvenanceMsg>, ContractError> {
     let state = config_read(deps.storage).load()?;
 
     if state.status != Status::CapitalCommited {
-        return Err(contract_error("capital not committed"))
+        return Err(contract_error("capital not committed"));
     }
 
     if info.sender != state.lp_capital_source {
-        return Err(contract_error("wrong investor recalling capital"))
+        return Err(contract_error("wrong investor recalling capital"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -117,31 +126,32 @@ pub fn try_recall_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result
 
     Ok(Response {
         submessages: vec![],
-        messages: vec![
-            BankMsg::Send {
-                to_address: state.lp_capital_source.to_string(),
-                amount: vec![
-                    Coin {
-                        denom: String::from(state.capital_denom),
-                        amount: Uint128::from(state.capital_amount)
-                    }
-                ],
-            }.into(),
-        ],
+        messages: vec![BankMsg::Send {
+            to_address: state.lp_capital_source.to_string(),
+            amount: vec![Coin {
+                denom: state.capital_denom,
+                amount: Uint128::from(state.capital_amount),
+            }],
+        }
+        .into()],
         attributes: vec![],
         data: Option::None,
     })
 }
 
-pub fn try_call_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<Response<ProvenanceMsg>, ContractError> {
+pub fn try_call_capital(
+    deps: DepsMut,
+    _env: Env,
+    info: MessageInfo,
+) -> Result<Response<ProvenanceMsg>, ContractError> {
     let state = config_read(deps.storage).load()?;
 
     if state.status != Status::CapitalCommited {
-        return Err(contract_error("capital not committed"))
+        return Err(contract_error("capital not committed"));
     }
 
     if info.sender != state.gp {
-        return Err(contract_error("wrong gp calling capital"))
+        return Err(contract_error("wrong gp calling capital"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -154,26 +164,22 @@ pub fn try_call_capital(deps: DepsMut, _env: Env, info: MessageInfo) -> Result<R
         messages: vec![
             BankMsg::Send {
                 to_address: state.lp_capital_source.to_string(),
-                amount: vec![
-                    Coin {
-                        denom: state.shares_denom,
-                        amount: Uint128::from(state.shares_amount)
-                    }
-                ],
-            }.into(),
+                amount: vec![Coin {
+                    denom: state.shares_denom,
+                    amount: Uint128::from(state.shares_amount),
+                }],
+            }
+            .into(),
             BankMsg::Send {
                 to_address: state.distribution.to_string(),
-                amount: vec![
-                    Coin {
-                        denom: String::from(state.capital_denom),
-                        amount: Uint128::from(state.capital_amount)
-                    }
-                ],
-            }.into(),
+                amount: vec![Coin {
+                    denom: state.capital_denom,
+                    amount: Uint128::from(state.capital_amount),
+                }],
+            }
+            .into(),
         ],
-        attributes: vec![
-            attr("memo", state.distribution_memo)
-        ],
+        attributes: vec![attr("memo", state.distribution_memo)],
         data: Option::None,
     })
 }
