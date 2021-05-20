@@ -103,7 +103,7 @@ pub fn try_commit_capital(
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
-        state.status = Status::CapitalCommited;
+        state.status = Status::CapitalCommitted;
         Ok(state)
     })?;
 
@@ -122,7 +122,7 @@ pub fn try_recall_capital(
 ) -> Result<Response<ProvenanceMsg>, ContractError> {
     let state = config_read(deps.storage).load()?;
 
-    if state.status != Status::CapitalCommited {
+    if state.status != Status::CapitalCommitted {
         return Err(contract_error("capital not committed"));
     }
 
@@ -158,7 +158,7 @@ pub fn try_call_capital(
 ) -> Result<Response<ProvenanceMsg>, ContractError> {
     let state = config_read(deps.storage).load()?;
 
-    if state.status != Status::CapitalCommited {
+    if state.status != Status::CapitalCommitted {
         return Err(contract_error("capital not committed"));
     }
 
@@ -207,27 +207,26 @@ mod tests {
     use super::*;
     use chrono::Duration;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary, Addr, Coin, Uint128};
+    use cosmwasm_std::{coins, from_binary, Addr, Coin};
 
-    #[test]
-    fn proper_initialization() {
-        let mut deps = mock_dependencies(&[]);
-
-        let msg = InstantiateMsg {
+    fn inst_msg() -> InstantiateMsg {
+        InstantiateMsg {
             distribution: Addr::unchecked("tp1s2wz3pjz3emxuw3fq45fg7253kdxhf8fpjjtp4"),
             distribution_memo: String::from("54d402f2-2871-428f-b77b-029a98a67c7e"),
             lp_capital_source: Addr::unchecked("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7"),
             admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
-            capital: Coin {
-                denom: String::from("cfigure"),
-                amount: Uint128(1000000),
-            },
+            capital: Coin::new(1000000, "cfigure"),
             due_date_time: (Utc::now() + Duration::days(14)).to_rfc3339(),
-        };
+        }
+    }
+
+    #[test]
+    fn initialization() {
+        let mut deps = mock_dependencies(&[]);
         let info = mock_info("creator", &coins(1000, "earth"));
 
         // we can just call .unwrap() to assert this was a success
-        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
         assert_eq!(0, res.messages.len());
 
         // it worked, let's query the state
@@ -236,50 +235,24 @@ mod tests {
         assert_eq!(Status::PendingCapital, status);
     }
 
-    // #[test]
-    // fn increment() {
-    //     let mut deps = mock_dependencies(&coins(2, "token"));
+    #[test]
+    fn commit_capital() {
+        let mut deps = mock_dependencies(&coins(2, "token"));
 
-    //     let msg = InstantiateMsg { count: 17 };
-    //     let info = mock_info("creator", &coins(2, "token"));
-    //     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let info = mock_info("creator", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
 
-    //     // beneficiary can release it
-    //     let info = mock_info("anyone", &coins(2, "token"));
-    //     let msg = HandleMsg::Increment {};
-    //     let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        // lp can commit capital
+        let info = mock_info(
+            "tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7",
+            &coins(1000000, "cfigure"),
+        );
+        let msg = HandleMsg::CommitCapital {};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-    //     // should increase counter by 1
-    //     let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-    //     let value: CountResponse = from_binary(&res).unwrap();
-    //     assert_eq!(18, value.count);
-    // }
-
-    // #[test]
-    // fn reset() {
-    //     let mut deps = mock_dependencies(&coins(2, "token"));
-
-    //     let msg = InstantiateMsg { count: 17 };
-    //     let info = mock_info("creator", &coins(2, "token"));
-    //     let _res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-    //     // beneficiary can release it
-    //     let unauth_info = mock_info("anyone", &coins(2, "token"));
-    //     let msg = HandleMsg::Reset { count: 5 };
-    //     let res = execute(deps.as_mut(), mock_env(), unauth_info, msg);
-    //     match res {
-    //         Err(ContractError::Unauthorized {}) => {}
-    //         _ => panic!("Must return unauthorized error"),
-    //     }
-
-    //     // only the original creator can reset the counter
-    //     let auth_info = mock_info("creator", &coins(2, "token"));
-    //     let msg = HandleMsg::Reset { count: 5 };
-    //     let _res = execute(deps.as_mut(), mock_env(), auth_info, msg).unwrap();
-
-    //     // should now be 5
-    //     let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-    //     let value: CountResponse = from_binary(&res).unwrap();
-    //     assert_eq!(5, value.count);
-    // }
+        // should be in capital commited state
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStatus {}).unwrap();
+        let status: Status = from_binary(&res).unwrap();
+        assert_eq!(Status::CapitalCommitted, status);
+    }
 }
