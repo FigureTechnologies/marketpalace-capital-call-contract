@@ -5,6 +5,8 @@ use cosmwasm_std::{
 };
 use provwasm_std::ProvenanceMsg;
 
+use chrono::{DateTime, ParseResult, Utc};
+
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
 use crate::state::{config, config_read, State, Status};
@@ -28,6 +30,15 @@ pub fn instantiate(
 
     let deposit = info.funds.first().unwrap();
 
+    match DateTime::parse_from_rfc3339(&msg.due_date_time) {
+        ParseResult::Ok(due_date_time) => {
+            if Utc::now() > due_date_time {
+                return Err(contract_error("due date must be in future"));
+            }
+        }
+        ParseResult::Err(_) => return Err(contract_error("unable to parse due date")),
+    }
+
     let state = State {
         status: Status::PendingCapital,
         gp: info.sender,
@@ -39,9 +50,7 @@ pub fn instantiate(
         admin: msg.admin,
         capital_denom: msg.capital_denom,
         capital_amount: msg.capital_amount,
-        due_date_year: msg.due_date_year,
-        due_date_month: msg.due_date_month,
-        due_date_day: msg.due_date_day,
+        due_date_time: msg.due_date_time,
     };
     config(deps.storage).save(&state)?;
 
@@ -63,6 +72,10 @@ pub fn execute(
     }
 }
 
+fn is_past_due_date(state: &State) -> bool {
+    Utc::now() > DateTime::parse_from_rfc3339(&state.due_date_time).unwrap()
+}
+
 pub fn try_commit_capital(
     deps: DepsMut,
     _env: Env,
@@ -72,6 +85,10 @@ pub fn try_commit_capital(
 
     if state.status != Status::PendingCapital {
         return Err(contract_error("contract no longer pending capital"));
+    }
+
+    if is_past_due_date(&state) {
+        return Err(contract_error("past due date"));
     }
 
     if info.sender != state.lp_capital_source {
@@ -84,7 +101,7 @@ pub fn try_commit_capital(
 
     let deposit = info.funds.first().unwrap();
     if deposit.denom != state.capital_denom {
-        return Err(contract_error("capital do not match required denom"));
+        return Err(contract_error("capital does not match required denom"));
     }
 
     if u128::from(deposit.amount) != state.capital_amount {
@@ -113,6 +130,10 @@ pub fn try_recall_capital(
 
     if state.status != Status::CapitalCommited {
         return Err(contract_error("capital not committed"));
+    }
+
+    if is_past_due_date(&state) {
+        return Err(contract_error("past due date"));
     }
 
     if info.sender != state.lp_capital_source {

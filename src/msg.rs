@@ -11,9 +11,7 @@ pub struct InstantiateMsg {
     pub admin: Addr,
     pub capital_denom: String,
     pub capital_amount: u128,
-    pub due_date_year: u16,
-    pub due_date_month: u16,
-    pub due_date_day: u16,
+    pub due_date_time: String,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]

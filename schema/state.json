@@ -8,9 +8,7 @@
     "capital_denom",
     "distribution",
     "distribution_memo",
-    "due_date_day",
-    "due_date_month",
-    "due_date_year",
+    "due_date_time",
     "gp",
     "lp_capital_source",
     "shares_amount",
@@ -35,20 +33,8 @@
     "distribution_memo": {
       "type": "string"
     },
-    "due_date_day": {
-      "type": "integer",
-      "format": "uint16",
-      "minimum": 0.0
-    },
-    "due_date_month": {
-      "type": "integer",
-      "format": "uint16",
-      "minimum": 0.0
-    },
-    "due_date_year": {
-      "type": "integer",
-      "format": "uint16",
-      "minimum": 0.0
+    "due_date_time": {
+      "type": "string"
     },
     "gp": {
       "$ref": "#/definitions/Addr"
