@@ -255,4 +255,30 @@ mod tests {
         let status: Status = from_binary(&res).unwrap();
         assert_eq!(Status::CapitalCommitted, status);
     }
+
+    #[test]
+    fn recall_capital() {
+        let mut deps = mock_dependencies(&coins(2, "token"));
+
+        let info = mock_info("creator", &coins(2, "token"));
+        let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
+
+        // lp can commit capital
+        let info = mock_info(
+            "tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7",
+            &coins(1000000, "cfigure"),
+        );
+        let msg = HandleMsg::CommitCapital {};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // lp can recall capital
+        let info = mock_info("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7", &vec![]);
+        let msg = HandleMsg::RecallCapital {};
+        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        // should be in pending capital state
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStatus {}).unwrap();
+        let status: Status = from_binary(&res).unwrap();
+        assert_eq!(Status::PendingCapital, status);
+    }
 }
