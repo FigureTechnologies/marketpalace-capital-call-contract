@@ -1,7 +1,7 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    attr, entry_point, to_binary, BankMsg, Binary, Coin, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult, Uint128,
+    attr, entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult,
 };
 use provwasm_std::ProvenanceMsg;
 
@@ -42,14 +42,12 @@ pub fn instantiate(
     let state = State {
         status: Status::PendingCapital,
         gp: info.sender,
-        shares_denom: String::from(&deposit.denom),
-        shares_amount: u128::from(deposit.amount),
+        shares: deposit.clone(),
         distribution: msg.distribution,
         distribution_memo: msg.distribution_memo,
         lp_capital_source: msg.lp_capital_source,
         admin: msg.admin,
-        capital_denom: msg.capital_denom,
-        capital_amount: msg.capital_amount,
+        capital: msg.capital,
         due_date_time: msg.due_date_time,
     };
     config(deps.storage).save(&state)?;
@@ -100,12 +98,8 @@ pub fn try_commit_capital(
     }
 
     let deposit = info.funds.first().unwrap();
-    if deposit.denom != state.capital_denom {
-        return Err(contract_error("capital does not match required denom"));
-    }
-
-    if u128::from(deposit.amount) != state.capital_amount {
-        return Err(contract_error("incorrect capital amount"));
+    if deposit != &state.capital {
+        return Err(contract_error("capital does not match required"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -149,10 +143,7 @@ pub fn try_recall_capital(
         submessages: vec![],
         messages: vec![BankMsg::Send {
             to_address: state.lp_capital_source.to_string(),
-            amount: vec![Coin {
-                denom: state.capital_denom,
-                amount: Uint128::from(state.capital_amount),
-            }],
+            amount: vec![state.capital],
         }
         .into()],
         attributes: vec![],
@@ -185,18 +176,12 @@ pub fn try_call_capital(
         messages: vec![
             BankMsg::Send {
                 to_address: state.lp_capital_source.to_string(),
-                amount: vec![Coin {
-                    denom: state.shares_denom,
-                    amount: Uint128::from(state.shares_amount),
-                }],
+                amount: vec![state.shares],
             }
             .into(),
             BankMsg::Send {
                 to_address: state.distribution.to_string(),
-                amount: vec![Coin {
-                    denom: state.capital_denom,
-                    amount: Uint128::from(state.capital_amount),
-                }],
+                amount: vec![state.capital],
             }
             .into(),
         ],
@@ -220,25 +205,36 @@ fn query_status(deps: Deps) -> StdResult<Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Duration;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary};
+    use cosmwasm_std::{coins, from_binary, Addr, Coin, Uint128};
 
-    // #[test]
-    // fn proper_initialization() {
-    //     let mut deps = mock_dependencies(&[]);
+    #[test]
+    fn proper_initialization() {
+        let mut deps = mock_dependencies(&[]);
 
-    //     let msg = InstantiateMsg { count: 17 };
-    //     let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = InstantiateMsg {
+            distribution: Addr::unchecked("tp1s2wz3pjz3emxuw3fq45fg7253kdxhf8fpjjtp4"),
+            distribution_memo: String::from("54d402f2-2871-428f-b77b-029a98a67c7e"),
+            lp_capital_source: Addr::unchecked("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7"),
+            admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
+            capital: Coin {
+                denom: String::from("cfigure"),
+                amount: Uint128(1000000),
+            },
+            due_date_time: (Utc::now() + Duration::days(14)).to_rfc3339(),
+        };
+        let info = mock_info("creator", &coins(1000, "earth"));
 
-    //     // we can just call .unwrap() to assert this was a success
-    //     let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
-    //     assert_eq!(0, res.messages.len());
+        // we can just call .unwrap() to assert this was a success
+        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        assert_eq!(0, res.messages.len());
 
-    //     // it worked, let's query the state
-    //     let res = query(deps.as_ref(), mock_env(), QueryMsg::GetCount {}).unwrap();
-    //     let value: CountResponse = from_binary(&res).unwrap();
-    //     assert_eq!(17, value.count);
-    // }
+        // it worked, let's query the state
+        let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStatus {}).unwrap();
+        let status: Status = from_binary(&res).unwrap();
+        assert_eq!(Status::PendingCapital, status);
+    }
 
     // #[test]
     // fn increment() {

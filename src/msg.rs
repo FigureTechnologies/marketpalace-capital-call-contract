@@ -1,7 +1,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use cosmwasm_std::Addr;
+use cosmwasm_std::{Addr, Coin};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
@@ -9,8 +9,7 @@ pub struct InstantiateMsg {
     pub distribution_memo: String,
     pub lp_capital_source: Addr,
     pub admin: Addr,
-    pub capital_denom: String,
-    pub capital_amount: u128,
+    pub capital: Coin,
     pub due_date_time: String,
 }
 
