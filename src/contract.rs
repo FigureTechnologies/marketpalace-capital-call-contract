@@ -3,7 +3,7 @@ use cosmwasm_std::{
     attr, entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
     StdResult,
 };
-use provwasm_std::ProvenanceMsg;
+use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg};
 
 use chrono::{DateTime, ParseResult, Utc};
 
@@ -168,11 +168,13 @@ pub fn try_call_capital(
     Ok(Response {
         submessages: vec![],
         messages: vec![
-            BankMsg::Send {
-                to_address: state.lp_capital_source.to_string(),
-                amount: vec![state.shares],
-            }
-            .into(),
+            mint_marker_supply(state.shares.amount.into(), state.shares.denom.clone())?,
+            withdraw_coins(
+                state.shares.denom.clone(),
+                state.shares.amount.into(),
+                state.shares.denom.clone(),
+                state.lp_capital_source,
+            )?,
             BankMsg::Send {
                 to_address: state.distribution.to_string(),
                 amount: vec![state.capital],
