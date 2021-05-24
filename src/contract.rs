@@ -24,12 +24,6 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    if info.funds.is_empty() {
-        return Err(contract_error("no shares were committed"));
-    }
-
-    let deposit = info.funds.first().unwrap();
-
     match DateTime::parse_from_rfc3339(&msg.due_date_time) {
         ParseResult::Ok(due_date_time) => {
             if Utc::now() > due_date_time {
@@ -42,12 +36,12 @@ pub fn instantiate(
     let state = State {
         status: Status::PendingCapital,
         gp: info.sender,
-        shares: deposit.clone(),
         distribution: msg.distribution,
         distribution_memo: msg.distribution_memo,
         lp_capital_source: msg.lp_capital_source,
         admin: msg.admin,
         capital: msg.capital,
+        shares: msg.shares,
         due_date_time: msg.due_date_time,
     };
     config(deps.storage).save(&state)?;
@@ -216,6 +210,7 @@ mod tests {
             lp_capital_source: Addr::unchecked("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7"),
             admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
             capital: Coin::new(1000000, "cfigure"),
+            shares: Coin::new(10, "fund-coin"),
             due_date_time: (Utc::now() + Duration::days(14)).to_rfc3339(),
         }
     }
@@ -223,7 +218,7 @@ mod tests {
     #[test]
     fn initialization() {
         let mut deps = mock_dependencies(&[]);
-        let info = mock_info("creator", &coins(1000, "earth"));
+        let info = mock_info("creator", &[]);
 
         // we can just call .unwrap() to assert this was a success
         let res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
@@ -239,7 +234,7 @@ mod tests {
     fn commit_capital() {
         let mut deps = mock_dependencies(&coins(2, "token"));
 
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &[]);
         let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
 
         // lp can commit capital
@@ -260,7 +255,7 @@ mod tests {
     fn recall_capital() {
         let mut deps = mock_dependencies(&coins(2, "token"));
 
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &[]);
         let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
 
         // lp can commit capital
@@ -286,7 +281,7 @@ mod tests {
     fn call_capital() {
         let mut deps = mock_dependencies(&coins(2, "token"));
 
-        let info = mock_info("creator", &coins(2, "token"));
+        let info = mock_info("creator", &[]);
         let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
 
         // lp can commit capital

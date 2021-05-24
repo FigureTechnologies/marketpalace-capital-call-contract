@@ -8,7 +8,8 @@
     "distribution",
     "distribution_memo",
     "due_date_time",
-    "lp_capital_source"
+    "lp_capital_source",
+    "shares"
   ],
   "properties": {
     "admin": {
@@ -28,6 +29,9 @@
     },
     "lp_capital_source": {
       "$ref": "#/definitions/Addr"
+    },
+    "shares": {
+      "$ref": "#/definitions/Coin"
     }
   },
   "definitions": {

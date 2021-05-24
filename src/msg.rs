@@ -10,6 +10,7 @@ pub struct InstantiateMsg {
     pub lp_capital_source: Addr,
     pub admin: Addr,
     pub capital: Coin,
+    pub shares: Coin,
     pub due_date_time: String,
 }
 
