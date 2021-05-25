@@ -5,8 +5,6 @@ use cosmwasm_std::{
 };
 use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg};
 
-use chrono::{DateTime, ParseResult, Utc};
-
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
 use crate::state::{config, config_read, State, Status};
@@ -24,15 +22,6 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    match DateTime::parse_from_rfc3339(&msg.due_date_time) {
-        ParseResult::Ok(due_date_time) => {
-            if Utc::now() > due_date_time {
-                return Err(contract_error("due date must be in future"));
-            }
-        }
-        ParseResult::Err(_) => return Err(contract_error("unable to parse due date")),
-    }
-
     let state = State {
         status: Status::PendingCapital,
         gp: info.sender,
@@ -64,8 +53,9 @@ pub fn execute(
     }
 }
 
-fn is_past_due_date(state: &State) -> bool {
-    Utc::now() > DateTime::parse_from_rfc3339(&state.due_date_time).unwrap()
+fn is_past_due_date(state: &State, _env: Env) -> bool {
+    let now = _env.block.time.nanos() / 1_000_000_000;
+    now > state.due_date_time
 }
 
 pub fn try_commit_capital(
@@ -79,7 +69,7 @@ pub fn try_commit_capital(
         return Err(contract_error("contract no longer pending capital"));
     }
 
-    if is_past_due_date(&state) {
+    if is_past_due_date(&state, _env) {
         return Err(contract_error("past due date"));
     }
 
@@ -120,7 +110,7 @@ pub fn try_recall_capital(
         return Err(contract_error("capital not committed"));
     }
 
-    if is_past_due_date(&state) {
+    if is_past_due_date(&state, _env) {
         return Err(contract_error("past due date"));
     }
 
@@ -165,16 +155,19 @@ pub fn try_call_capital(
         Ok(state)
     })?;
 
+    let mint = mint_marker_supply(state.shares.amount.into(), state.shares.denom.clone())?;
+    let withdraw = withdraw_coins(
+        state.shares.denom.clone(),
+        state.shares.amount.into(),
+        state.shares.denom.clone(),
+        state.lp_capital_source,
+    )?;
+
     Ok(Response {
         submessages: vec![],
         messages: vec![
-            mint_marker_supply(state.shares.amount.into(), state.shares.denom.clone())?,
-            withdraw_coins(
-                state.shares.denom.clone(),
-                state.shares.amount.into(),
-                state.shares.denom.clone(),
-                state.lp_capital_source,
-            )?,
+            mint,
+            withdraw,
             BankMsg::Send {
                 to_address: state.distribution.to_string(),
                 amount: vec![state.capital],
@@ -201,9 +194,10 @@ fn query_status(deps: Deps) -> StdResult<Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Duration;
     use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
     use cosmwasm_std::{coins, from_binary, Addr, Coin};
+    use std::time::SystemTime;
+    use std::time::UNIX_EPOCH;
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
@@ -213,7 +207,11 @@ mod tests {
             admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
             capital: Coin::new(1000000, "cfigure"),
             shares: Coin::new(10, "fund-coin"),
-            due_date_time: (Utc::now() + Duration::days(14)).to_rfc3339(),
+            due_date_time: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+                + 1_000,
         }
     }
 

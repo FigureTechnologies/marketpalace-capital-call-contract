@@ -25,7 +25,9 @@
       "type": "string"
     },
     "due_date_time": {
-      "type": "string"
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
     },
     "lp_capital_source": {
       "$ref": "#/definitions/Addr"

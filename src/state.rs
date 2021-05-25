@@ -16,7 +16,7 @@ pub struct State {
     pub admin: Addr,
     pub capital: Coin,
     pub shares: Coin,
-    pub due_date_time: String,
+    pub due_date_time: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
