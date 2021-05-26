@@ -7,7 +7,6 @@
     "capital",
     "distribution",
     "distribution_memo",
-    "due_date_time",
     "gp",
     "lp_capital_source",
     "shares",
@@ -27,7 +26,10 @@
       "type": "string"
     },
     "due_date_time": {
-      "type": "integer",
+      "type": [
+        "integer",
+        "null"
+      ],
       "format": "uint64",
       "minimum": 0.0
     },

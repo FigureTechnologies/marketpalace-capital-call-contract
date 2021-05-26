@@ -54,8 +54,13 @@ pub fn execute(
 }
 
 fn is_past_due_date(state: &State, _env: Env) -> bool {
-    let now = _env.block.time.nanos() / 1_000_000_000;
-    now > state.due_date_time
+    match state.due_date_time {
+        Some(due_date_time) => {
+            let now = _env.block.time.nanos() / 1_000_000_000;
+            now > due_date_time
+        }
+        None => false,
+    }
 }
 
 pub fn try_commit_capital(
@@ -207,11 +212,13 @@ mod tests {
             admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
             capital: Coin::new(1000000, "cfigure"),
             shares: Coin::new(10, "fund-coin"),
-            due_date_time: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-                + 1_000,
+            due_date_time: Some(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs()
+                    + 1_000,
+            ),
         }
     }
 
