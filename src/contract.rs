@@ -199,9 +199,9 @@ fn query_status(deps: Deps) -> StdResult<Status> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary, Addr, Coin};
+    use cosmwasm_std::{coins, from_binary, Addr, Coin, CosmosMsg};
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
-    use provwasm_std::Marker;
+    use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
     use std::time::SystemTime;
     use std::time::UNIX_EPOCH;
 
@@ -306,6 +306,73 @@ mod tests {
         let info = mock_info("creator", &vec![]);
         let msg = HandleMsg::CallCapital {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+
+        let mint = _res
+            .messages
+            .iter()
+            .find_map(|msg| match msg {
+                CosmosMsg::Custom(custom) => match custom {
+                    ProvenanceMsg {
+                        route: _,
+                        params,
+                        version: _,
+                    } => match params {
+                        ProvenanceMsgParams::Marker(params) => match params {
+                            MarkerMsgParams::MintMarkerSupply { coin } => Some(coin),
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                },
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(10, u128::from(mint.amount));
+
+        let (withdraw_coin, withdraw_recipient) = _res
+            .messages
+            .iter()
+            .find_map(|msg| match msg {
+                CosmosMsg::Custom(custom) => match custom {
+                    ProvenanceMsg {
+                        route: _,
+                        params,
+                        version: _,
+                    } => match params {
+                        ProvenanceMsgParams::Marker(params) => match params {
+                            MarkerMsgParams::WithdrawCoins {
+                                marker_denom: _,
+                                coin,
+                                recipient,
+                            } => Some((coin, recipient)),
+                            _ => None,
+                        },
+                        _ => None,
+                    },
+                },
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!(10, u128::from(withdraw_coin.amount));
+        assert_eq!(
+            "tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7",
+            withdraw_recipient.to_string()
+        );
+
+        let (to_address, amount) = _res
+            .messages
+            .iter()
+            .find_map(|msg| match msg {
+                CosmosMsg::Bank(bank) => match bank {
+                    BankMsg::Send { to_address, amount } => Some((to_address, amount)),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!("tp18vmzryrvwaeykmdtu6cfrz5sau3dhc5c73ms0u", to_address);
+        assert_eq!(1000000, u128::from(amount[0].amount));
+        assert_eq!("cfigure", amount[0].denom);
 
         // should be in capital called state
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStatus {}).unwrap();
