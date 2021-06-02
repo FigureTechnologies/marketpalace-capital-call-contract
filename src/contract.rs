@@ -116,7 +116,7 @@ pub fn try_recall_capital(
         return Err(contract_error("past due date"));
     }
 
-    if info.sender != state.lp_capital_source {
+    if info.sender != state.lp_capital_source && info.sender != state.admin {
         return Err(contract_error("wrong investor recalling capital"));
     }
 
@@ -148,7 +148,7 @@ pub fn try_call_capital(
         return Err(contract_error("capital not committed"));
     }
 
-    if info.sender != state.gp {
+    if info.sender != state.gp && info.sender != state.admin {
         return Err(contract_error("wrong gp calling capital"));
     }
 
