@@ -1,9 +1,8 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    attr, entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult,
+    entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
-use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg};
+use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
@@ -25,8 +24,6 @@ pub fn instantiate(
     let state = State {
         status: Status::PendingCapital,
         gp: info.sender,
-        distribution: msg.distribution,
-        distribution_memo: msg.distribution_memo,
         lp_capital_source: msg.lp_capital_source,
         admin: msg.admin,
         capital: msg.capital,
@@ -168,18 +165,20 @@ pub fn try_call_capital(
         state.lp_capital_source,
     )?;
 
+    let marker = ProvenanceQuerier::new(&deps.querier).get_marker_by_denom(state.shares.denom)?;
+
     Ok(Response {
         submessages: vec![],
         messages: vec![
             mint,
             withdraw,
             BankMsg::Send {
-                to_address: state.distribution.to_string(),
+                to_address: marker.address.to_string(),
                 amount: vec![state.capital],
             }
             .into(),
         ],
-        attributes: vec![attr("memo", state.distribution_memo)],
+        attributes: vec![],
         data: Option::None,
     })
 }
@@ -199,15 +198,15 @@ fn query_status(deps: Deps) -> StdResult<Status> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::testing::{mock_env, mock_info};
     use cosmwasm_std::{coins, from_binary, Addr, Coin};
+    use provwasm_mocks::{mock_dependencies, must_read_binary_file};
+    use provwasm_std::Marker;
     use std::time::SystemTime;
     use std::time::UNIX_EPOCH;
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
-            distribution: Addr::unchecked("tp1s2wz3pjz3emxuw3fq45fg7253kdxhf8fpjjtp4"),
-            distribution_memo: String::from("54d402f2-2871-428f-b77b-029a98a67c7e"),
             lp_capital_source: Addr::unchecked("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7"),
             admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
             capital: Coin::new(1000000, "cfigure"),
@@ -286,7 +285,11 @@ mod tests {
 
     #[test]
     fn call_capital() {
-        let mut deps = mock_dependencies(&coins(2, "token"));
+        // Create a mock querier with our expected marker.
+        let bin = must_read_binary_file("testdata/marker.json");
+        let expected_marker: Marker = from_binary(&bin).unwrap();
+        let mut deps = mock_dependencies(&[]);
+        deps.querier.with_markers(vec![expected_marker.clone()]);
 
         let info = mock_info("creator", &[]);
         let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();

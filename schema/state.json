@@ -5,8 +5,6 @@
   "required": [
     "admin",
     "capital",
-    "distribution",
-    "distribution_memo",
     "gp",
     "lp_capital_source",
     "shares",
@@ -18,12 +16,6 @@
     },
     "capital": {
       "$ref": "#/definitions/Coin"
-    },
-    "distribution": {
-      "$ref": "#/definitions/Addr"
-    },
-    "distribution_memo": {
-      "type": "string"
     },
     "due_date_time": {
       "type": [
