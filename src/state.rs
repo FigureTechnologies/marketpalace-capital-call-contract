@@ -20,6 +20,7 @@ pub struct State {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub enum Status {
     PendingCapital,
+    Cancelled,
     CapitalCommitted,
     CapitalCalled,
 }

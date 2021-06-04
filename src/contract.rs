@@ -44,8 +44,8 @@ pub fn execute(
     msg: HandleMsg,
 ) -> Result<Response<ProvenanceMsg>, ContractError> {
     match msg {
+        HandleMsg::Cancel {} => try_cancel(deps, _env, info),
         HandleMsg::CommitCapital {} => try_commit_capital(deps, _env, info),
-        HandleMsg::RecallCapital {} => try_recall_capital(deps, _env, info),
         HandleMsg::CallCapital {} => try_call_capital(deps, _env, info),
     }
 }
@@ -101,37 +101,39 @@ pub fn try_commit_capital(
     })
 }
 
-pub fn try_recall_capital(
+pub fn try_cancel(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
 ) -> Result<Response<ProvenanceMsg>, ContractError> {
     let state = config_read(deps.storage).load()?;
 
-    if state.status != Status::CapitalCommitted {
-        return Err(contract_error("capital not committed"));
+    if state.status == Status::CapitalCalled {
+        return Err(contract_error("capital already called"));
+    } else if state.status == Status::Cancelled {
+        return Err(contract_error("already cancelled"));
     }
 
-    if is_past_due_date(&state, _env) {
-        return Err(contract_error("past due date"));
-    }
-
-    if info.sender != state.lp_capital_source && info.sender != state.admin {
-        return Err(contract_error("wrong investor recalling capital"));
+    if info.sender != state.gp && info.sender != state.admin {
+        return Err(contract_error("wrong gp cancelling capital call"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
-        state.status = Status::PendingCapital;
+        state.status = Status::Cancelled;
         Ok(state)
     })?;
 
     Ok(Response {
         submessages: vec![],
-        messages: vec![BankMsg::Send {
-            to_address: state.lp_capital_source.to_string(),
-            amount: vec![state.capital],
-        }
-        .into()],
+        messages: if state.status == Status::CapitalCommitted {
+            vec![BankMsg::Send {
+                to_address: state.lp_capital_source.to_string(),
+                amount: vec![state.capital],
+            }
+            .into()]
+        } else {
+            vec![]
+        },
         attributes: vec![],
         data: Option::None,
     })
@@ -258,7 +260,7 @@ mod tests {
     }
 
     #[test]
-    fn recall_capital() {
+    fn cancel() {
         let mut deps = mock_dependencies(&coins(2, "token"));
 
         let info = mock_info("creator", &[]);
@@ -272,15 +274,31 @@ mod tests {
         let msg = HandleMsg::CommitCapital {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // lp can recall capital
-        let info = mock_info("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7", &vec![]);
-        let msg = HandleMsg::RecallCapital {};
+        // gp can cancel capital call
+        let info = mock_info("creator", &[]);
+        let msg = HandleMsg::Cancel {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
         // should be in pending capital state
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStatus {}).unwrap();
         let status: Status = from_binary(&res).unwrap();
-        assert_eq!(Status::PendingCapital, status);
+        assert_eq!(Status::Cancelled, status);
+
+        // should send stable coin back to lp
+        let (to_address, amount) = _res
+            .messages
+            .iter()
+            .find_map(|msg| match msg {
+                CosmosMsg::Bank(bank) => match bank {
+                    BankMsg::Send { to_address, amount } => Some((to_address, amount)),
+                    _ => None,
+                },
+                _ => None,
+            })
+            .unwrap();
+        assert_eq!("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7", to_address);
+        assert_eq!(1000000, u128::from(amount[0].amount));
+        assert_eq!("cfigure", amount[0].denom);
     }
 
     #[test]
