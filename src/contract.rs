@@ -28,7 +28,6 @@ pub fn instantiate(
         admin: msg.admin,
         capital: msg.capital,
         shares: msg.shares,
-        due_date_time: msg.due_date_time,
     };
     config(deps.storage).save(&state)?;
 
@@ -50,16 +49,6 @@ pub fn execute(
     }
 }
 
-fn is_past_due_date(state: &State, _env: Env) -> bool {
-    match state.due_date_time {
-        Some(due_date_time) => {
-            let now = _env.block.time.nanos() / 1_000_000_000;
-            now > due_date_time
-        }
-        None => false,
-    }
-}
-
 pub fn try_commit_capital(
     deps: DepsMut,
     _env: Env,
@@ -69,10 +58,6 @@ pub fn try_commit_capital(
 
     if state.status != Status::PendingCapital {
         return Err(contract_error("contract no longer pending capital"));
-    }
-
-    if is_past_due_date(&state, _env) {
-        return Err(contract_error("past due date"));
     }
 
     if info.sender != state.lp_capital_source {
@@ -204,8 +189,6 @@ mod tests {
     use cosmwasm_std::{coins, from_binary, Addr, Coin, CosmosMsg};
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
     use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
-    use std::time::SystemTime;
-    use std::time::UNIX_EPOCH;
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
@@ -213,13 +196,6 @@ mod tests {
             admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
             capital: Coin::new(1000000, "cfigure"),
             shares: Coin::new(10, "fund-coin"),
-            due_date_time: Some(
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs()
-                    + 1_000,
-            ),
         }
     }
 
