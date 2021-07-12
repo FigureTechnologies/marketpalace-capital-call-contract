@@ -2,7 +2,7 @@ use cosmwasm_std::StdError;
 use cosmwasm_std::{
     entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
-use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
+use provwasm_std::{withdraw_coins, ProvenanceMsg};
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
@@ -23,11 +23,11 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let state = State {
         status: Status::PendingCapital,
-        gp: info.sender,
-        lp_capital_source: msg.lp_capital_source,
-        admin: msg.admin,
+        raise: info.sender.clone(),
+        subscription: msg.subscription,
+        admin: info.sender,
         capital: msg.capital,
-        shares: msg.shares,
+        asset: msg.asset,
     };
     config(deps.storage).save(&state)?;
 
@@ -45,7 +45,7 @@ pub fn execute(
     match msg {
         HandleMsg::Cancel {} => try_cancel(deps, _env, info),
         HandleMsg::CommitCapital {} => try_commit_capital(deps, _env, info),
-        HandleMsg::CallCapital {} => try_call_capital(deps, _env, info),
+        HandleMsg::Close {} => try_close_call(deps, _env, info),
     }
 }
 
@@ -58,10 +58,6 @@ pub fn try_commit_capital(
 
     if state.status != Status::PendingCapital {
         return Err(contract_error("contract no longer pending capital"));
-    }
-
-    if info.sender != state.lp_capital_source {
-        return Err(contract_error("wrong investor committing capital"));
     }
 
     if info.funds.is_empty() {
@@ -99,8 +95,8 @@ pub fn try_cancel(
         return Err(contract_error("already cancelled"));
     }
 
-    if info.sender != state.gp && info.sender != state.admin {
-        return Err(contract_error("wrong gp cancelling capital call"));
+    if info.sender != state.raise && info.sender != state.admin {
+        return Err(contract_error("only raise can cancel"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -112,7 +108,7 @@ pub fn try_cancel(
         submessages: vec![],
         messages: if state.status == Status::CapitalCommitted {
             vec![BankMsg::Send {
-                to_address: state.lp_capital_source.to_string(),
+                to_address: state.subscription.to_string(),
                 amount: vec![state.capital],
             }
             .into()]
@@ -124,7 +120,7 @@ pub fn try_cancel(
     })
 }
 
-pub fn try_call_capital(
+pub fn try_close_call(
     deps: DepsMut,
     _env: Env,
     info: MessageInfo,
@@ -135,8 +131,8 @@ pub fn try_call_capital(
         return Err(contract_error("capital not committed"));
     }
 
-    if info.sender != state.gp && info.sender != state.admin {
-        return Err(contract_error("wrong gp calling capital"));
+    if info.sender != state.raise && info.sender != state.admin {
+        return Err(contract_error("only raise can call capital"));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -144,23 +140,19 @@ pub fn try_call_capital(
         Ok(state)
     })?;
 
-    let mint = mint_marker_supply(state.shares.amount.into(), state.shares.denom.clone())?;
     let withdraw = withdraw_coins(
-        state.shares.denom.clone(),
-        state.shares.amount.into(),
-        state.shares.denom.clone(),
-        state.lp_capital_source,
+        state.asset.denom.clone(),
+        state.asset.amount.into(),
+        state.asset.denom.clone(),
+        state.subscription,
     )?;
-
-    let marker = ProvenanceQuerier::new(&deps.querier).get_marker_by_denom(state.shares.denom)?;
 
     Ok(Response {
         submessages: vec![],
         messages: vec![
-            mint,
             withdraw,
             BankMsg::Send {
-                to_address: marker.address.to_string(),
+                to_address: state.raise.to_string(),
                 amount: vec![state.capital],
             }
             .into(),
@@ -192,10 +184,9 @@ mod tests {
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
-            lp_capital_source: Addr::unchecked("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7"),
-            admin: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
+            subscription: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
             capital: Coin::new(1000000, "cfigure"),
-            shares: Coin::new(10, "fund-coin"),
+            asset: Coin::new(10, "fund-coin"),
         }
     }
 
@@ -250,7 +241,7 @@ mod tests {
         let msg = HandleMsg::CommitCapital {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // gp can cancel capital call
+        // raise can cancel capital call
         let info = mock_info("creator", &[]);
         let msg = HandleMsg::Cancel {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
@@ -272,13 +263,13 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        assert_eq!("tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7", to_address);
+        assert_eq!("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000", to_address);
         assert_eq!(1000000, u128::from(amount[0].amount));
         assert_eq!("cfigure", amount[0].denom);
     }
 
     #[test]
-    fn call_capital() {
+    fn close() {
         // Create a mock querier with our expected marker.
         let bin = must_read_binary_file("testdata/marker.json");
         let expected_marker: Marker = from_binary(&bin).unwrap();
@@ -296,32 +287,10 @@ mod tests {
         let msg = HandleMsg::CommitCapital {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        // gp can call capital
+        // raise can close
         let info = mock_info("creator", &vec![]);
-        let msg = HandleMsg::CallCapital {};
+        let msg = HandleMsg::Close {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
-
-        let mint = _res
-            .messages
-            .iter()
-            .find_map(|msg| match msg {
-                CosmosMsg::Custom(custom) => match custom {
-                    ProvenanceMsg {
-                        route: _,
-                        params,
-                        version: _,
-                    } => match params {
-                        ProvenanceMsgParams::Marker(params) => match params {
-                            MarkerMsgParams::MintMarkerSupply { coin } => Some(coin),
-                            _ => None,
-                        },
-                        _ => None,
-                    },
-                },
-                _ => None,
-            })
-            .unwrap();
-        assert_eq!(10, u128::from(mint.amount));
 
         let (withdraw_coin, withdraw_recipient) = _res
             .messages
@@ -349,7 +318,7 @@ mod tests {
             .unwrap();
         assert_eq!(10, u128::from(withdraw_coin.amount));
         assert_eq!(
-            "tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7",
+            "tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000",
             withdraw_recipient.to_string()
         );
 
@@ -364,7 +333,7 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        assert_eq!("tp18vmzryrvwaeykmdtu6cfrz5sau3dhc5c73ms0u", to_address);
+        assert_eq!("creator", to_address);
         assert_eq!(1000000, u128::from(amount[0].amount));
         assert_eq!("cfigure", amount[0].denom);
 

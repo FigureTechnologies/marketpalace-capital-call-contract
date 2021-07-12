@@ -9,11 +9,11 @@ pub static CONFIG_KEY: &[u8] = b"config";
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
     pub status: Status,
-    pub gp: Addr,
-    pub lp_capital_source: Addr,
+    pub raise: Addr,
+    pub subscription: Addr,
     pub admin: Addr,
     pub capital: Coin,
-    pub shares: Coin,
+    pub asset: Coin,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
