@@ -104,14 +104,16 @@ pub fn try_cancel(
         Ok(state)
     })?;
 
+    let send = BankMsg::Send {
+        to_address: state.subscription.to_string(),
+        amount: vec![state.capital],
+    }
+    .into();
+
     Ok(Response {
         submessages: vec![],
         messages: if state.status == Status::CapitalCommitted {
-            vec![BankMsg::Send {
-                to_address: state.subscription.to_string(),
-                amount: vec![state.capital],
-            }
-            .into()]
+            vec![send]
         } else {
             vec![]
         },
