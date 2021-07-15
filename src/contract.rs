@@ -23,8 +23,16 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
+    let contract: SubscriptionState = from_slice(
+        &deps
+            .querier
+            .query_wasm_raw(msg.subscription.clone(), CONFIG_KEY)?
+            .unwrap(),
+    )?;
+
     let state = State {
         status: Status::PendingCapital,
+        raise: contract.raise,
         subscription: msg.subscription,
         admin: info.sender,
         capital: msg.capital,
@@ -110,14 +118,7 @@ pub fn try_cancel(
         return Err(contract_error("already cancelled"));
     }
 
-    let contract: SubscriptionState = from_slice(
-        &deps
-            .querier
-            .query_wasm_raw(state.subscription.clone(), CONFIG_KEY)?
-            .unwrap(),
-    )?;
-
-    if info.sender != contract.raise && info.sender != state.admin {
+    if info.sender != state.raise && info.sender != state.admin {
         return Err(contract_error("only raise can cancel"));
     }
 
@@ -155,14 +156,7 @@ pub fn try_close_call(
         return Err(contract_error("capital not committed"));
     }
 
-    let contract: SubscriptionState = from_slice(
-        &deps
-            .querier
-            .query_wasm_raw(state.subscription.clone(), CONFIG_KEY)?
-            .unwrap(),
-    )?;
-
-    if info.sender != contract.raise && info.sender != state.admin {
+    if info.sender != state.raise && info.sender != state.admin {
         return Err(contract_error("only raise can call capital"));
     }
 
@@ -183,7 +177,7 @@ pub fn try_close_call(
         messages: vec![
             withdraw,
             BankMsg::Send {
-                to_address: contract.raise.to_string(),
+                to_address: state.raise.to_string(),
                 amount: vec![state.capital],
             }
             .into(),
