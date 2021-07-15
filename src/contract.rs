@@ -1,12 +1,14 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    entry_point, from_slice, to_binary, Addr, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
 use provwasm_std::{withdraw_coins, ProvenanceMsg};
 
+use serde::{Deserialize, Serialize};
+
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
-use crate::state::{config, config_read, State, Status};
+use crate::state::{config, config_read, State, Status, CONFIG_KEY};
 
 fn contract_error(err: &str) -> ContractError {
     ContractError::Std(StdError::generic_err(err))
@@ -23,7 +25,6 @@ pub fn instantiate(
 ) -> Result<Response, ContractError> {
     let state = State {
         status: Status::PendingCapital,
-        raise: info.sender.clone(),
         subscription: msg.subscription,
         admin: info.sender,
         capital: msg.capital,
@@ -82,6 +83,20 @@ pub fn try_commit_capital(
     })
 }
 
+#[derive(Deserialize)]
+pub struct SubscriptionState {
+    pub owner: Addr,
+    pub status: Status,
+    pub raise: Addr,
+    pub admin: Addr,
+    pub capital_denom: String,
+    pub min_commitment: u64,
+    pub max_commitment: u64,
+    pub min_days_of_notice: Option<u16>,
+    pub commitment: Option<u64>,
+    pub capital_calls: Vec<Addr>,
+}
+
 pub fn try_cancel(
     deps: DepsMut,
     _env: Env,
@@ -95,7 +110,14 @@ pub fn try_cancel(
         return Err(contract_error("already cancelled"));
     }
 
-    if info.sender != state.raise && info.sender != state.admin {
+    let contract: SubscriptionState = from_slice(
+        &deps
+            .querier
+            .query_wasm_raw(state.subscription.clone(), CONFIG_KEY)?
+            .unwrap(),
+    )?;
+
+    if info.sender != contract.raise && info.sender != state.admin {
         return Err(contract_error("only raise can cancel"));
     }
 
@@ -133,7 +155,14 @@ pub fn try_close_call(
         return Err(contract_error("capital not committed"));
     }
 
-    if info.sender != state.raise && info.sender != state.admin {
+    let contract: SubscriptionState = from_slice(
+        &deps
+            .querier
+            .query_wasm_raw(state.subscription.clone(), CONFIG_KEY)?
+            .unwrap(),
+    )?;
+
+    if info.sender != contract.raise && info.sender != state.admin {
         return Err(contract_error("only raise can call capital"));
     }
 
@@ -154,7 +183,7 @@ pub fn try_close_call(
         messages: vec![
             withdraw,
             BankMsg::Send {
-                to_address: state.raise.to_string(),
+                to_address: contract.raise.to_string(),
                 amount: vec![state.capital],
             }
             .into(),
