@@ -1,13 +1,14 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    entry_point, from_slice, to_binary, Addr, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
+    entry_point, from_slice, to_binary, Addr, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo,
+    Response, StdResult,
 };
 use provwasm_std::{withdraw_coins, ProvenanceMsg};
 
 use serde::{Deserialize, Serialize};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg, Terms};
 use crate::state::{config, config_read, State, Status, CONFIG_KEY};
 
 fn contract_error(err: &str) -> ContractError {
@@ -189,14 +190,17 @@ pub fn try_close_call(
 
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
-    match msg {
-        QueryMsg::GetStatus {} => to_binary(&query_status(deps)?),
-    }
-}
-
-fn query_status(deps: Deps) -> StdResult<Status> {
     let state = config_read(deps.storage).load()?;
-    Ok(state.status)
+
+    match msg {
+        QueryMsg::GetStatus {} => to_binary(&state.status),
+        QueryMsg::GetTerms {} => to_binary(&Terms {
+            raise: state.raise,
+            subscription: state.subscription,
+            capital: state.capital,
+            asset: state.asset,
+        }),
+    }
 }
 
 #[cfg(test)]

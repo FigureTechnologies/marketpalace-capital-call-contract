@@ -17,10 +17,17 @@ pub enum HandleMsg {
     CommitCapital {},
     Close {},
 }
+#[derive(Deserialize, Serialize)]
+pub struct Terms {
+    pub subscription: Addr,
+    pub raise: Addr,
+    pub capital: Coin,
+    pub asset: Coin,
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-    // GetStatus returns the current status as a json-encoded number
     GetStatus {},
+    GetTerms {},
 }
