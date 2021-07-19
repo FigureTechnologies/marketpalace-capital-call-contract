@@ -191,7 +191,9 @@ mod tests {
     use super::*;
     use crate::mock::wasm_smart_mock_dependencies;
     use cosmwasm_std::testing::{mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult};
+    use cosmwasm_std::{
+        coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult,
+    };
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
     use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
 
