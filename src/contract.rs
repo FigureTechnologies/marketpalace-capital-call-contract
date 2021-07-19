@@ -1,15 +1,14 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    entry_point, from_slice, to_binary, Addr, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo,
-    Response, StdResult,
+    entry_point, to_binary, Addr, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
+    StdResult,
 };
 use provwasm_std::{withdraw_coins, ProvenanceMsg};
 
-use serde::{Deserialize, Serialize};
-
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg, Terms};
-use crate::state::{config, config_read, State, Status, CONFIG_KEY};
+use crate::state::{config, config_read, State, Status};
+use crate::sub::{SubQueryMsg, SubTerms};
 
 fn contract_error(err: &str) -> ContractError {
     ContractError::Std(StdError::generic_err(err))
@@ -24,16 +23,14 @@ pub fn instantiate(
     info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    let contract: SubscriptionState = from_slice(
-        &deps
-            .querier
-            .query_wasm_raw(msg.subscription.clone(), CONFIG_KEY)?
-            .unwrap(),
-    )?;
+    let terms: SubTerms = deps
+        .querier
+        .query_wasm_smart(msg.subscription.clone(), &SubQueryMsg::GetTerms {})
+        .expect("terms");
 
     let state = State {
         status: Status::PendingCapital,
-        raise: contract.raise,
+        raise: terms.raise,
         subscription: msg.subscription,
         admin: info.sender,
         capital: msg.capital,
@@ -90,20 +87,6 @@ pub fn try_commit_capital(
         attributes: vec![],
         data: Option::None,
     })
-}
-
-#[derive(Deserialize)]
-pub struct SubscriptionState {
-    pub owner: Addr,
-    pub status: Status,
-    pub raise: Addr,
-    pub admin: Addr,
-    pub capital_denom: String,
-    pub min_commitment: u64,
-    pub max_commitment: u64,
-    pub min_days_of_notice: Option<u16>,
-    pub commitment: Option<u64>,
-    pub capital_calls: Vec<Addr>,
 }
 
 pub fn try_cancel(
@@ -206,26 +189,47 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mock::wasm_smart_mock_dependencies;
     use cosmwasm_std::testing::{mock_env, mock_info};
-    use cosmwasm_std::{coins, from_binary, Addr, Coin, CosmosMsg};
+    use cosmwasm_std::{coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult};
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
     use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
-            subscription: Addr::unchecked("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000"),
-            capital: Coin::new(1000000, "cfigure"),
-            asset: Coin::new(10, "fund-coin"),
+            subscription: Addr::unchecked("sub_1"),
+            capital: Coin::new(1000000, "stable_coin"),
+            asset: Coin::new(10, "fund_coin"),
         }
     }
 
     #[test]
     fn initialization() {
-        let mut deps = mock_dependencies(&[]);
-        let info = mock_info("creator", &[]);
+        let mut deps =
+            wasm_smart_mock_dependencies(|contract_addr, _msg| match &contract_addr[..] {
+                "sub_1" => SystemResult::Ok(ContractResult::Ok(
+                    to_binary(&SubTerms {
+                        owner: Addr::unchecked("lp"),
+                        raise: Addr::unchecked("raise"),
+                        capital_denom: String::from("stable_coin"),
+                        min_commitment: 10_000,
+                        max_commitment: 50_000,
+                    })
+                    .unwrap(),
+                )),
+                _ => SystemResult::Err(SystemError::UnsupportedRequest {
+                    kind: String::from("not mocked"),
+                }),
+            });
 
         // we can just call .unwrap() to assert this was a success
-        let res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
+        let res = instantiate(
+            deps.as_mut(),
+            mock_env(),
+            mock_info("creator", &[]),
+            inst_msg(),
+        )
+        .unwrap();
         assert_eq!(0, res.messages.len());
 
         // it worked, let's query the state
