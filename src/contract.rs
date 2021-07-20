@@ -268,20 +268,19 @@ mod tests {
     #[test]
     fn cancel() {
         let mut deps = mock_dependencies(&coins(2, "token"));
-
-        let info = mock_info("creator", &[]);
-        let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
-
-        // lp can commit capital
-        let info = mock_info(
-            "tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7",
-            &coins(1000000, "cfigure"),
-        );
-        let msg = HandleMsg::CommitCapital {};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        config(&mut deps.storage)
+            .save(&State {
+                status: Status::CapitalCommitted,
+                raise: Addr::unchecked("raise"),
+                subscription: Addr::unchecked("sub"),
+                admin: Addr::unchecked("admin"),
+                capital: coin(10_000, "stable_coin"),
+                asset: coin(0, "fund_coin"),
+            })
+            .unwrap();
 
         // raise can cancel capital call
-        let info = mock_info("creator", &[]);
+        let info = mock_info("raise", &[]);
         let msg = HandleMsg::Cancel {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
@@ -290,7 +289,7 @@ mod tests {
         let status: Status = from_binary(&res).unwrap();
         assert_eq!(Status::Cancelled, status);
 
-        // should send stable coin back to lp
+        // should send stable coin back to sub
         let (to_address, amount) = _res
             .messages
             .iter()
@@ -302,9 +301,9 @@ mod tests {
                 _ => None,
             })
             .unwrap();
-        assert_eq!("tp1apnhcu9x5cz2l8hhgnj0hg7ez53jah7hcan000", to_address);
-        assert_eq!(1000000, u128::from(amount[0].amount));
-        assert_eq!("cfigure", amount[0].denom);
+        assert_eq!("sub", to_address);
+        assert_eq!(10_000, u128::from(amount[0].amount));
+        assert_eq!("stable_coin", amount[0].denom);
     }
 
     #[test]
