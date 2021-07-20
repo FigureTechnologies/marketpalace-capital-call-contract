@@ -1,7 +1,6 @@
 use cosmwasm_std::StdError;
 use cosmwasm_std::{
-    entry_point, to_binary, Addr, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response,
-    StdResult,
+    entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
 use provwasm_std::{withdraw_coins, ProvenanceMsg};
 
@@ -354,10 +353,7 @@ mod tests {
             })
             .unwrap();
         assert_eq!(10_000, u128::from(withdraw_coin.amount));
-        assert_eq!(
-            "sub",
-            withdraw_recipient.to_string()
-        );
+        assert_eq!("sub", withdraw_recipient.to_string());
 
         let (to_address, amount) = _res
             .messages
