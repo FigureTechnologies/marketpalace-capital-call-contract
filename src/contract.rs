@@ -192,7 +192,7 @@ mod tests {
     use crate::mock::wasm_smart_mock_dependencies;
     use cosmwasm_std::testing::{mock_env, mock_info};
     use cosmwasm_std::{
-        coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult,
+        coin, coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult,
     };
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
     use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
@@ -243,15 +243,19 @@ mod tests {
     #[test]
     fn commit_capital() {
         let mut deps = mock_dependencies(&coins(2, "token"));
-
-        let info = mock_info("creator", &[]);
-        let _res = instantiate(deps.as_mut(), mock_env(), info, inst_msg()).unwrap();
+        config(&mut deps.storage)
+            .save(&State {
+                status: Status::PendingCapital,
+                raise: Addr::unchecked("raise"),
+                subscription: Addr::unchecked("sub"),
+                admin: Addr::unchecked("admin"),
+                capital: coin(10_000, "stable_coin"),
+                asset: coin(0, "fund_coin"),
+            })
+            .unwrap();
 
         // lp can commit capital
-        let info = mock_info(
-            "tp18lysxk7sueunnspju4dar34vlv98a7kyyfkqs7",
-            &coins(1000000, "cfigure"),
-        );
+        let info = mock_info("lp", &coins(10_000, "stable_coin"));
         let msg = HandleMsg::CommitCapital {};
         let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
