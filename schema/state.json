@@ -4,30 +4,30 @@
   "type": "object",
   "required": [
     "admin",
+    "asset",
     "capital",
-    "gp",
-    "lp_capital_source",
-    "shares",
-    "status"
+    "raise",
+    "status",
+    "subscription"
   ],
   "properties": {
     "admin": {
       "$ref": "#/definitions/Addr"
     },
+    "asset": {
+      "$ref": "#/definitions/Coin"
+    },
     "capital": {
       "$ref": "#/definitions/Coin"
     },
-    "gp": {
+    "raise": {
       "$ref": "#/definitions/Addr"
-    },
-    "lp_capital_source": {
-      "$ref": "#/definitions/Addr"
-    },
-    "shares": {
-      "$ref": "#/definitions/Coin"
     },
     "status": {
       "$ref": "#/definitions/Status"
+    },
+    "subscription": {
+      "$ref": "#/definitions/Addr"
     }
   },
   "definitions": {

@@ -3,23 +3,19 @@
   "title": "InstantiateMsg",
   "type": "object",
   "required": [
-    "admin",
+    "asset",
     "capital",
-    "lp_capital_source",
-    "shares"
+    "subscription"
   ],
   "properties": {
-    "admin": {
-      "$ref": "#/definitions/Addr"
+    "asset": {
+      "$ref": "#/definitions/Coin"
     },
     "capital": {
       "$ref": "#/definitions/Coin"
     },
-    "lp_capital_source": {
+    "subscription": {
       "$ref": "#/definitions/Addr"
-    },
-    "shares": {
-      "$ref": "#/definitions/Coin"
     }
   },
   "definitions": {
