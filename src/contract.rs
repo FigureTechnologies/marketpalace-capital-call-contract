@@ -19,7 +19,7 @@ fn contract_error(err: &str) -> ContractError {
 pub fn instantiate(
     deps: DepsMut,
     _env: Env,
-    info: MessageInfo,
+    _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
     let terms: SubTerms = deps
@@ -30,8 +30,8 @@ pub fn instantiate(
     let state = State {
         status: Status::PendingCapital,
         raise: terms.raise,
+        admin: msg.admin,
         subscription: msg.subscription,
-        admin: info.sender,
         capital: msg.capital,
         asset: msg.asset,
     };
@@ -101,7 +101,7 @@ pub fn try_cancel(
         return Err(contract_error("already cancelled"));
     }
 
-    if info.sender != state.raise && info.sender != state.admin {
+    if info.sender != state.raise {
         return Err(contract_error("only raise can cancel"));
     }
 
@@ -139,7 +139,7 @@ pub fn try_close_call(
         return Err(contract_error("capital not committed"));
     }
 
-    if info.sender != state.raise && info.sender != state.admin {
+    if info.sender != state.raise {
         return Err(contract_error("only raise can call capital"));
     }
 
@@ -246,8 +246,8 @@ mod tests {
             .save(&State {
                 status: Status::PendingCapital,
                 raise: Addr::unchecked("raise"),
-                subscription: Addr::unchecked("sub"),
                 admin: Addr::unchecked("admin"),
+                subscription: Addr::unchecked("sub"),
                 capital: coin(10_000, "stable_coin"),
                 asset: coin(0, "fund_coin"),
             })
@@ -271,8 +271,8 @@ mod tests {
             .save(&State {
                 status: Status::CapitalCommitted,
                 raise: Addr::unchecked("raise"),
-                subscription: Addr::unchecked("sub"),
                 admin: Addr::unchecked("admin"),
+                subscription: Addr::unchecked("sub"),
                 capital: coin(10_000, "stable_coin"),
                 asset: coin(0, "fund_coin"),
             })
@@ -316,8 +316,8 @@ mod tests {
             .save(&State {
                 status: Status::CapitalCommitted,
                 raise: Addr::unchecked("raise"),
-                subscription: Addr::unchecked("sub"),
                 admin: Addr::unchecked("admin"),
+                subscription: Addr::unchecked("sub"),
                 capital: coin(10_000, "stable_coin"),
                 asset: coin(10_000, "fund_coin"),
             })
