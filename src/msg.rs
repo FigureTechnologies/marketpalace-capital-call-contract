@@ -6,6 +6,7 @@ use cosmwasm_std::{Addr, Coin};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct InstantiateMsg {
     pub admin: Addr,
+    pub raise: Addr,
     pub subscription: Addr,
     pub capital: Coin,
     pub asset: Coin,

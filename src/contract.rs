@@ -7,7 +7,6 @@ use provwasm_std::{withdraw_coins, ProvenanceMsg};
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg, Terms};
 use crate::state::{config, config_read, State, Status};
-use crate::sub::{SubQueryMsg, SubTerms};
 
 fn contract_error(err: &str) -> ContractError {
     ContractError::Std(StdError::generic_err(err))
@@ -22,14 +21,9 @@ pub fn instantiate(
     _info: MessageInfo,
     msg: InstantiateMsg,
 ) -> Result<Response, ContractError> {
-    let terms: SubTerms = deps
-        .querier
-        .query_wasm_smart(msg.subscription.clone(), &SubQueryMsg::GetTerms {})
-        .expect("terms");
-
     let state = State {
         status: Status::PendingCapital,
-        raise: terms.raise,
+        raise: msg.raise,
         admin: msg.admin,
         subscription: msg.subscription,
         capital: msg.capital,
@@ -188,7 +182,6 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::wasm_smart_mock_dependencies;
     use cosmwasm_std::testing::{mock_env, mock_info};
     use cosmwasm_std::{
         coin, coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult,
@@ -198,6 +191,8 @@ mod tests {
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
+            admin: Addr::unchecked("admin"),
+            raise: Addr::unchecked("raise"),
             subscription: Addr::unchecked("sub_1"),
             capital: Coin::new(1000000, "stable_coin"),
             asset: Coin::new(10, "fund_coin"),
@@ -206,22 +201,7 @@ mod tests {
 
     #[test]
     fn initialization() {
-        let mut deps =
-            wasm_smart_mock_dependencies(&vec![], |contract_addr, _msg| match &contract_addr[..] {
-                "sub_1" => SystemResult::Ok(ContractResult::Ok(
-                    to_binary(&SubTerms {
-                        owner: Addr::unchecked("lp"),
-                        raise: Addr::unchecked("raise"),
-                        capital_denom: String::from("stable_coin"),
-                        min_commitment: 10_000,
-                        max_commitment: 50_000,
-                    })
-                    .unwrap(),
-                )),
-                _ => SystemResult::Err(SystemError::UnsupportedRequest {
-                    kind: String::from("not mocked"),
-                }),
-            });
+        let mut deps = mock_dependencies(&vec![]);
 
         // we can just call .unwrap() to assert this was a success
         let res = instantiate(
