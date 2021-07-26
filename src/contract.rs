@@ -183,9 +183,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
 mod tests {
     use super::*;
     use cosmwasm_std::testing::{mock_env, mock_info};
-    use cosmwasm_std::{
-        coin, coins, from_binary, Addr, Coin, ContractResult, CosmosMsg, SystemError, SystemResult,
-    };
+    use cosmwasm_std::{coin, coins, from_binary, Addr, Coin, CosmosMsg};
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
     use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
 
