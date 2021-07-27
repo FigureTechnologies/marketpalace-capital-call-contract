@@ -2,7 +2,7 @@ use cosmwasm_std::StdError;
 use cosmwasm_std::{
     entry_point, to_binary, BankMsg, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
 };
-use provwasm_std::{withdraw_coins, ProvenanceMsg};
+use provwasm_std::ProvenanceMsg;
 
 use crate::error::ContractError;
 use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg, Terms};
@@ -134,7 +134,18 @@ pub fn try_close_call(
     }
 
     if info.sender != state.raise {
-        return Err(contract_error("only raise can call capital"));
+        return Err(contract_error("only raise can close"));
+    }
+
+    let asset = match info.funds.first() {
+        Some(asset) => asset,
+        None => return Err(contract_error("must provide asset to close")),
+    };
+
+    if asset != &state.asset {
+        return Err(contract_error(
+            "must provide same asset denom and amount to close",
+        ));
     }
 
     config(deps.storage).update(|mut state| -> Result<_, ContractError> {
@@ -142,23 +153,21 @@ pub fn try_close_call(
         Ok(state)
     })?;
 
-    let withdraw = withdraw_coins(
-        state.asset.denom.clone(),
-        state.asset.amount.into(),
-        state.asset.denom.clone(),
-        state.subscription,
-    )?;
+    let send_asset = BankMsg::Send {
+        to_address: state.subscription.to_string(),
+        amount: vec![state.asset],
+    }
+    .into();
+
+    let send_capital = BankMsg::Send {
+        to_address: state.raise.to_string(),
+        amount: vec![state.capital],
+    }
+    .into();
 
     Ok(Response {
         submessages: vec![],
-        messages: vec![
-            withdraw,
-            BankMsg::Send {
-                to_address: state.raise.to_string(),
-                amount: vec![state.capital],
-            }
-            .into(),
-        ],
+        messages: vec![send_asset, send_capital],
         attributes: vec![],
         data: Option::None,
     })
@@ -185,7 +194,7 @@ mod tests {
     use cosmwasm_std::testing::{mock_env, mock_info};
     use cosmwasm_std::{coin, coins, from_binary, Addr, Coin, CosmosMsg};
     use provwasm_mocks::{mock_dependencies, must_read_binary_file};
-    use provwasm_std::{Marker, MarkerMsgParams, ProvenanceMsgParams};
+    use provwasm_std::Marker;
 
     fn inst_msg() -> InstantiateMsg {
         InstantiateMsg {
@@ -195,6 +204,25 @@ mod tests {
             capital: Coin::new(1000000, "stable_coin"),
             asset: Coin::new(10, "fund_coin"),
         }
+    }
+
+    fn is_send_msg(
+        to: &'static str,
+        amount: u128,
+        denom: &'static str,
+    ) -> Box<dyn Fn(&CosmosMsg<ProvenanceMsg>) -> bool> {
+        Box::new(move |msg| match msg {
+            CosmosMsg::Bank(bank) => match bank {
+                BankMsg::Send {
+                    to_address,
+                    amount: coins,
+                } => {
+                    to_address == to && coins[0].amount.u128() == amount && coins[0].denom == denom
+                }
+                _ => false,
+            },
+            _ => false,
+        })
     }
 
     #[test]
@@ -302,51 +330,22 @@ mod tests {
             .unwrap();
 
         // raise can close
-        let info = mock_info("raise", &vec![]);
+        let info = mock_info("raise", &coins(10_000, "fund_coin"));
         let msg = HandleMsg::Close {};
-        let _res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
+        let res = execute(deps.as_mut(), mock_env(), info, msg).unwrap();
 
-        let (withdraw_coin, withdraw_recipient) = _res
-            .messages
-            .iter()
-            .find_map(|msg| match msg {
-                CosmosMsg::Custom(custom) => match custom {
-                    ProvenanceMsg {
-                        route: _,
-                        params,
-                        version: _,
-                    } => match params {
-                        ProvenanceMsgParams::Marker(params) => match params {
-                            MarkerMsgParams::WithdrawCoins {
-                                marker_denom: _,
-                                coin,
-                                recipient,
-                            } => Some((coin, recipient)),
-                            _ => None,
-                        },
-                        _ => None,
-                    },
-                },
-                _ => None,
-            })
-            .unwrap();
-        assert_eq!(10_000, u128::from(withdraw_coin.amount));
-        assert_eq!("sub", withdraw_recipient.to_string());
-
-        let (to_address, amount) = _res
-            .messages
-            .iter()
-            .find_map(|msg| match msg {
-                CosmosMsg::Bank(bank) => match bank {
-                    BankMsg::Send { to_address, amount } => Some((to_address, amount)),
-                    _ => None,
-                },
-                _ => None,
-            })
-            .unwrap();
-        assert_eq!("raise", to_address);
-        assert_eq!(10_000, u128::from(amount[0].amount));
-        assert_eq!("stable_coin", amount[0].denom);
+        assert_eq!(
+            true,
+            res.messages
+                .iter()
+                .any(is_send_msg("raise", 10_000, "stable_coin"))
+        );
+        assert_eq!(
+            true,
+            res.messages
+                .iter()
+                .any(is_send_msg("sub", 10_000, "fund_coin"))
+        );
 
         // should be in capital called state
         let res = query(deps.as_ref(), mock_env(), QueryMsg::GetStatus {}).unwrap();
