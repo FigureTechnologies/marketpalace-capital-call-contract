@@ -5,7 +5,7 @@ use cosmwasm_std::{
 use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{HandleMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::{config, config_read, State, Status};
 
 fn contract_error(err: &str) -> ContractError {
@@ -31,6 +31,11 @@ pub fn instantiate(
     };
     config(deps.storage).save(&state)?;
 
+    Ok(Response::default())
+}
+
+#[entry_point]
+pub fn migrate(_: DepsMut, _: Env, _: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
 }
 
