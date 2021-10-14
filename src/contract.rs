@@ -5,7 +5,7 @@ use cosmwasm_std::{
 use provwasm_std::{mint_marker_supply, withdraw_coins, ProvenanceMsg, ProvenanceQuerier};
 
 use crate::error::ContractError;
-use crate::msg::{HandleMsg, InstantiateMsg, QueryMsg};
+use crate::msg::{HandleMsg, InstantiateMsg, MigrateMsg, QueryMsg};
 use crate::state::{config, config_read, State, Status};
 
 fn contract_error(err: &str) -> ContractError {
@@ -31,6 +31,11 @@ pub fn instantiate(
     };
     config(deps.storage).save(&state)?;
 
+    Ok(Response::default())
+}
+
+#[entry_point]
+pub fn migrate(_: DepsMut, _: Env, _: MigrateMsg) -> Result<Response, ContractError> {
     Ok(Response::default())
 }
 
@@ -78,12 +83,7 @@ pub fn try_commit_capital(
         Ok(state)
     })?;
 
-    Ok(Response {
-        submessages: vec![],
-        messages: vec![],
-        attributes: vec![],
-        data: Option::None,
-    })
+    Ok(Response::default())
 }
 
 pub fn try_cancel(
@@ -108,20 +108,16 @@ pub fn try_cancel(
         Ok(state)
     })?;
 
-    Ok(Response {
-        submessages: vec![],
-        messages: if state.status == Status::CapitalCommitted {
+    Ok(
+        Response::new().add_messages(if state.status == Status::CapitalCommitted {
             vec![BankMsg::Send {
                 to_address: state.lp_capital_source.to_string(),
                 amount: vec![state.capital],
-            }
-            .into()]
+            }]
         } else {
             vec![]
-        },
-        attributes: vec![],
-        data: Option::None,
-    })
+        }),
+    )
 }
 
 pub fn try_call_capital(
@@ -154,20 +150,15 @@ pub fn try_call_capital(
 
     let marker = ProvenanceQuerier::new(&deps.querier).get_marker_by_denom(state.shares.denom)?;
 
-    Ok(Response {
-        submessages: vec![],
-        messages: vec![
-            mint,
-            withdraw,
-            BankMsg::Send {
-                to_address: marker.address.to_string(),
-                amount: vec![state.capital],
-            }
-            .into(),
-        ],
-        attributes: vec![],
-        data: Option::None,
-    })
+    Ok(Response::new().add_messages(vec![
+        mint,
+        withdraw,
+        BankMsg::Send {
+            to_address: marker.address.to_string(),
+            amount: vec![state.capital],
+        }
+        .into(),
+    ]))
 }
 
 #[entry_point]
@@ -264,7 +255,7 @@ mod tests {
         let (to_address, amount) = _res
             .messages
             .iter()
-            .find_map(|msg| match msg {
+            .find_map(|sub_msg| match &sub_msg.msg {
                 CosmosMsg::Bank(bank) => match bank {
                     BankMsg::Send { to_address, amount } => Some((to_address, amount)),
                     _ => None,
@@ -304,7 +295,7 @@ mod tests {
         let mint = _res
             .messages
             .iter()
-            .find_map(|msg| match msg {
+            .find_map(|sub_msg| match &sub_msg.msg {
                 CosmosMsg::Custom(custom) => match custom {
                     ProvenanceMsg {
                         route: _,
@@ -326,7 +317,7 @@ mod tests {
         let (withdraw_coin, withdraw_recipient) = _res
             .messages
             .iter()
-            .find_map(|msg| match msg {
+            .find_map(|sub_msg| match &sub_msg.msg {
                 CosmosMsg::Custom(custom) => match custom {
                     ProvenanceMsg {
                         route: _,
@@ -356,7 +347,7 @@ mod tests {
         let (to_address, amount) = _res
             .messages
             .iter()
-            .find_map(|msg| match msg {
+            .find_map(|sub_msg| match &sub_msg.msg {
                 CosmosMsg::Bank(bank) => match bank {
                     BankMsg::Send { to_address, amount } => Some((to_address, amount)),
                     _ => None,
